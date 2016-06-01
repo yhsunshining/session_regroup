@@ -1,0 +1,9 @@
+session_regroup/output/
+session_regroup/Release/
+session_regroup/Debug/
+Debug/session_regroup.exe
+Debug/
+Release/session_regroup.pdb
+ipch/
+Release/
+session_regroup.sdf
