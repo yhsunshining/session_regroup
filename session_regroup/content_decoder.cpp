@@ -43,7 +43,7 @@ bool gzip_decoder::ungzip(unsigned char* gzdata, size_t gzdata_len, std::string&
 
     while (d_stream.total_in < gzdata_len)
     {
-		if ((err = inflate(&d_stream, Z_NO_FLUSH)) == Z_STREAM_END)
+		if ((err = inflate(&d_stream, Z_SYNC_FLUSH)) == Z_STREAM_END)
         {
             out_data.append((const char*)uncompress_buff_, d_stream.total_out - out_count);
             err = inflateEnd(&d_stream);

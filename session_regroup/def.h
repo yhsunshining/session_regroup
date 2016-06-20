@@ -30,9 +30,10 @@ typedef	u_int bpf_u_int32;
 #define SHLEN 14
 #define ENCODE "Content-Encoding"
 #define SENCODE 16
-#define HOST "HOST"
+#define HOST "Host"
 #define SHOST 4
-
+#define CHUNKED "Transfer-Encoding"
+#define SCHUNKED 17
 struct pcap_pkthdr {
 	long    tv_sec;
 	long    tv_usec;
@@ -44,6 +45,7 @@ struct ether_header {
 	u_char ether_dhost[6];
 	u_short ether_type;
 };
+
 struct ip_header{
 	u_int8_t  verl;
 	u_int8_t  tos;            // 服务类型(Type of service) 
@@ -53,20 +55,21 @@ struct ip_header{
 	u_int8_t  ttl;            // 存活时间(Time to live)
 	u_int8_t  proto;          // 协议(Protocol)
 	u_int16_t crc;            // 首部校验和(Header checksum)
-	u_int8_t  saddr[4];      // 源地址(Source address)
-	u_int8_t  daddr[4];      // 目的地址(Destination address)
-	u_int   op_pad;         // 选项与填充(Option + Padding)
+	u_int8_t  saddr[4];		  // 源地址(Source address)
+	u_int8_t  daddr[4];       // 目的地址(Destination address)
+	u_int   op_pad;           // 选项与填充(Option + Padding)
 };
+
 struct tcp_header
 {
 	u_int16_t sport;
 	u_int16_t dport;
 	u_int32_t seq;             /* sequence number */
 	u_int32_t ack;             /* acknowledgement number */
-	u_int16_t len_resv_code;     //   Datagram   length and reserved code
-	u_int16_t win;           /* window */
-	u_int16_t sum;           /* checksum */
-	u_int16_t urp;           /* urgent pointer */
+	u_int16_t len_resv_code;   /* tcp头长，flag*/
+	u_int16_t win;          
+	u_int16_t sum;          
+	u_int16_t urp;          
 };
 struct tcp_node {
 	int count;
@@ -119,11 +122,11 @@ struct http_node {
 	u_char *content;
 	u_int len;
 	bool dir;
-	
 	http_node * prev;
 	http_node * next;
 };
 struct http_session {
+	int tcp_session;
 	char saddr[16];
 	char daddr[16];
 	u_int16_t sprot;
@@ -134,8 +137,10 @@ struct http_session {
 	u_char *ver;
 	u_char *status;
 	u_char *host;
-	u_int total_len;
+	u_int req_len;
+	u_int res_len;
 	bool isGzip;
+	bool isChunked;
 	http_node * node_head;
 	http_node * node_tail;
 	http_session * next;

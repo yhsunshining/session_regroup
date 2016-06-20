@@ -20,7 +20,7 @@ int count = 0;
 tcp_session * tcp_head = NULL, *tcp_tail = NULL;
 udp_session * udp_head = NULL, *udp_tail = NULL;
 http_session * http_head = NULL, *http_tail = NULL;
-char *method[7] = { "GET", "PUT", "POST", "DELETE", "HEAD","TRACE","CONNETCT" };
+char *method[10] = { "GET", "PUT", "POST", "DELETE", "HEAD", "TRACE", "CONNETCT", "HTTP/1.0", "HTTP/1.1", "HTTP/2" };
 char *hver[3] = { "HTTP/1.0", "HTTP/1.1", "HTTP/2" };
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -28,7 +28,6 @@ class CAboutDlg : public CDialogEx
 {
 public:
 	CAboutDlg();
-
 // 对话框数据
 	enum { IDD = IDD_ABOUTBOX };
 
@@ -177,11 +176,10 @@ void Csession_regroupDlg::OnBnClickedOk()
 	tcp_head = NULL, tcp_tail = NULL;
 	udp_head = NULL, udp_tail = NULL;
 	http_head = NULL, http_tail = NULL;
-	//input_path = "C:/Users/Administrator/Desktop/TCP[61.135.186.152][80][172.30.217.3][10061].pcap";
-	input_path = "F:\\Documents\\Visual Studio 2013\\Projects\\tcpPcap\\tcpPcap/baidu.pcap";
-	output_path = "C:/Users/Administrator/Desktop/httpout";
+	//input_path = "C:/Users/Administrator/Desktop/TCP[61.135.169.112][80][172.30.217.3][10060].pcap";
+	//input_path = "F:\\Documents\\Visual Studio 2013\\Projects\\tcpPcap\\tcpPcap/bilibili.pcap";
 	
-	//input.GetWindowTextW(input_path);
+	input.GetWindowTextW(input_path);
 	//output.GetWindowTextW(output_path);
 	TCHAR* dir = (TCHAR *)malloc(lstrlen(input_path)*sizeof(TCHAR));
 	TCHAR drive[5], fname[50], ext[6];
@@ -191,15 +189,7 @@ void Csession_regroupDlg::OnBnClickedOk()
 		MessageBox(_T("输入格式错误"));
 		return;
 	}
-	if (!createfolder(output_path)){
-		info.SetWindowTextW(_T(""));
-		MessageBox(_T("输出路径错误"));
-		return;
-	}
-	createfolder(output_path);
-	createfolder(output_path+_T("/pcap/"));
-	createfolder(output_path + _T("/txt/"));
-	createfolder(output_path + _T("/_txt/"));
+	
 	_wfopen_s(&in, input_path, _T("rb"));
 	if (in != NULL){
 		info.SetWindowTextW(_T("运行中，读取输入···"));
@@ -218,6 +208,7 @@ void Csession_regroupDlg::OnBnClickedOk()
 		fclose(in);
 		tcp_session *cur_ts = tcp_head;
 		bool find_http = false;
+		int tcp_index = 0;
 		while (cur_ts != NULL){
 			find_http = false;
 			isTrunk = false;
@@ -231,7 +222,7 @@ void Csession_regroupDlg::OnBnClickedOk()
 						}
 					}
 					if (find_http){
-						handle_http(cur_ts, p);
+						handle_http(cur_ts, p,&tcp_index);
 					}
 					if (cur_ts->sprot == 5060 || cur_ts->dprot == 5060){
 
@@ -240,6 +231,7 @@ void Csession_regroupDlg::OnBnClickedOk()
 				p = p->next;
 			}
 			cur_ts = cur_ts->next;
+			tcp_index++;
 		}
 		info.SetWindowTextW(_T("读取成功。"));
 		analysis = true;
@@ -258,8 +250,19 @@ void Csession_regroupDlg::OnBnClickedOk2()
 		MessageBox(_T("分析未成功执行。"));
 		return;
 	}
-	CString input_path, output_path;
-	output_path = "C:/Users/Administrator/Desktop/httpout";
+	CString output_path;
+	//output_path = "C:/Users/Administrator/Desktop/httpout";
+	output.GetWindowTextW(output_path);
+	if (!createfolder(output_path)){
+		info.SetWindowTextW(_T(""));
+		MessageBox(_T("输出路径错误"));
+		return;
+	}
+	createfolder(output_path);
+	createfolder(output_path + _T("/pcap/"));
+	createfolder(output_path + _T("/txt/"));
+	createfolder(output_path + _T("/_txt/"));
+	createfolder(output_path + _T("/file/"));
 
 	FILE *pcap, *txt, *_txt;
 	WCHAR filename[1000];
@@ -350,7 +353,7 @@ void Csession_regroupDlg::OnBnClickedOk2()
 			fprintf(_txt, "[dadd]\t\t:[%s]\r\n", cur_us->daddr);
 			fprintf(_txt, "[sport]\t\t:[%u]\r\n", cur_us->sprot);
 			fprintf(_txt, "[dport]\t\t:[%u]\r\n", cur_us->dprot);
-			fprintf(_txt, "[protocol]\t:[udp]}\r\n\r\n\r\n\r\n", cur_us->dprot);
+			fprintf(_txt, "[protocol]\t:[udp]}\r\n\r\n\r\n\r\n");
 			while (p != NULL){
 				fwrite(&(p->pkth), sizeof(p->pkth), 1, pcap);
 				fwrite(p->pkt_data, p->pkth.caplen, 1, pcap);
@@ -373,31 +376,57 @@ void Csession_regroupDlg::OnBnClickedOk2()
 		cur_us = cur_us->next;
 	}
 	http_session * cur_hs = http_head;
+	int last_index = -1;
 	while (cur_hs != NULL){
 		memset(filename, 0, sizeof(filename));
 		memset(txtname, 0, sizeof(txtname));
+		memset(_txtname, 0, sizeof(_txtname));
+		wsprintf(filename, _T("http[%s][%u][%s][%u]"), (CString)(cur_hs->saddr), cur_hs->sprot, (CString)(cur_hs->daddr), cur_hs->dprot);
+		wsprintf(_txtname, _T("%s/_txt/%s-.txt"), output_path, filename);
 		if (cur_hs->filename != NULL){
-			wsprintf(txtname, _T("%s/%s"), output_path, (CString)(cur_hs->filename));
+			wsprintf(txtname, _T("%s/file/%s"), output_path, (CString)(cur_hs->filename));
 		}
 		else {
-			wsprintf(filename, _T("%s/http[%s][%u][%s][%u]"), output_path, (CString)(cur_hs->saddr), cur_hs->sprot, (CString)(cur_hs->daddr), cur_hs->dprot);
-			wsprintf(txtname, _T("%s.txt"), filename);
+			wsprintf(txtname, _T("%s/file/%s.txt"), output_path, filename);
 		}
+		
 		txt = NULL;
+		_txt = NULL;
+		if (last_index != cur_hs->tcp_session){
+			_wfopen_s(&_txt, _txtname, L"wb");
+		}
+		else {
+			_wfopen_s(&_txt, _txtname, L"ab");
+		}
 		_wfopen_s(&txt, txtname, L"wb");
 		http_node *p = cur_hs->node_head, *tn_prev = NULL;
-		if (_txt != NULL){
+		if (_txt != NULL && txt!=NULL){
 			info.SetWindowTextW(_T("运行中，写入输出···"));
+			fprintf(_txt, "{[sadd]\t\t:[%s]\r\n", cur_hs->saddr);
+			fprintf(_txt, "[dadd]\t\t:[%s]\r\n", cur_hs->daddr);
+			fprintf(_txt, "[sport]\t\t:[%u]\r\n", cur_hs->sprot);
+			fprintf(_txt, "[dport]\t\t:[%u]\r\n", cur_hs->dprot);
+			fprintf(_txt, "[protocol]\t:[http]\r\n");
+			fprintf(_txt, "[method]\t:[%s]\r\n", cur_hs->method);
+			fprintf(_txt, "[status]\t:[%s]\r\n", cur_hs->status);
+			fprintf(_txt, "[req_len]\t:[%u]\r\n", cur_hs->req_len);
+			fprintf(_txt, "[res_len]\t:[%u]\r\n", cur_hs->res_len);
+			fprintf(_txt, "[host]\t\t:[%s]\r\n", cur_hs->host);
+			fprintf(_txt, "[path]\t\t:[%s]\r\n", cur_hs->path);
+			fprintf(_txt, "[filename]\t:[%s]\r\n\r\n\r\n\r\n", cur_hs->filename);
 			while (p != NULL){
 				if (p->len){
 					fwrite(p->content, p->len, sizeof(u_char), txt);
+					fprintf(_txt, "{[content]\t:[0x%x]\r\n", &(p->content));
+					fprintf(_txt, "[len]\t\t:[%u]}\r\n\r\n", p->len);
 				}
 				p = p->next;
 			}
+			fprintf(_txt, "///////////////////////////////////////////////////////////////////////////////\r\n\r\n");
 		}
 		else {
 			info.SetWindowTextW(_T(""));
-			MessageBox(_T("存储文件失败，路径不存在。udp保存失败。"));
+			MessageBox(_T("存储文件失败，路径不存在。http保存失败。"));
 			return;
 		}
 		if (txt != NULL){
@@ -423,7 +452,12 @@ void Csession_regroupDlg::OnBnClickedOk2()
 				}
 			}
 		}
+		if (_txt != NULL){
+			fclose(_txt);
+		}
+		last_index = cur_hs->tcp_session;
 		cur_hs = cur_hs->next;
+		
 	}
 	info.SetWindowTextW(_T(""));
 	MessageBox(_T("处理完成。"));
@@ -647,7 +681,7 @@ void Csession_regroupDlg::dispatcher_handler(u_char *temp1, pcap_pkthdr *header,
 	}
 }
 
-int find(u_char * in, const char * tail){
+int Csession_regroupDlg::find(u_char * in, const char * tail){
 	for (int i = 0; i < (strlen((char *)in) - strlen(tail))+1; i++){
 		if (strncmp((char *)(in + i), tail, strlen(tail)) == 0){
 			return i;
@@ -656,7 +690,7 @@ int find(u_char * in, const char * tail){
 	return -1;
 }
 
-char * split_file_name(char * path){
+char * Csession_regroupDlg::split_file_name(char * path){
 	//char *dir = (char*)malloc(sizeof(char)*strlen(path));
 	char *file = (char*)malloc(sizeof(char)*strlen(path));
 	file[0] = '\0';
@@ -686,7 +720,7 @@ char * split_file_name(char * path){
 	
 }
 
-void Csession_regroupDlg::handle_http(tcp_session *ts,tcp_node *tn){
+void Csession_regroupDlg::handle_http(tcp_session *ts,tcp_node *tn,int* tcp_index){
 	u_char *data = tn->pkt_data + tn->offset;
 	http_session * hs = (http_session *)malloc(sizeof(http_session));
 	strcpy(hs->saddr, ts->saddr);
@@ -698,17 +732,20 @@ void Csession_regroupDlg::handle_http(tcp_session *ts,tcp_node *tn){
 	hs->ver = NULL;
 	hs->status = NULL;
 	hs->host = NULL;
-	hs->total_len = 0;
+	hs->req_len = 0;
+	hs->res_len = 0;
 	hs->path = NULL;
 	hs->next = NULL;
 	hs->isGzip = false;
+	hs->isChunked = false;
+	hs->tcp_session = *tcp_index;
 	http_node * hn = (http_node *)malloc(sizeof(http_node));
 	hn->next = NULL;
 	hn->prev = NULL;
 	int i = 0;
 	int FLAG = 7;
 	for (; i < 10; i++){
-		if (strncmp((char *)data, method[i], strlen(method[i])) == 0){
+		if (strncmp((char *)data, *(method+i), strlen(*(method+i))) == 0){
 			int type = i;
 			int len = 0;
 			bool isNew = false;
@@ -757,19 +794,52 @@ void Csession_regroupDlg::handle_http(tcp_session *ts,tcp_node *tn){
 			}
 			data = data + offset + SCRLF;
 			len += offset + SCRLF;
-			offset = find(data, HLEN);
-			if (offset != -1){
-				u_char * cursor = data + offset + SHLEN + 1;
-				offset = find(cursor, CRLF);
-				char tem[6];
-				memcpy(tem, cursor, offset);
-				hn->len = (u_int)atol(tem)< tn->content_len ? (u_int)atol(tem) : tn->content_len;
 
+			offset = find(data, CHUNKED);
+			if (offset != -1){
+				u_char * cursor = data + offset + SCHUNKED + 1;
+				offset = find(cursor, CRLF);
+				u_char *tem = (u_char*)malloc(offset + 1);
+				memcpy(tem, cursor, offset);
+				tem[offset] = '\0';
+				offset = find(tem, "chunked");
+				if (offset != -1){
+					if (type < FLAG){
+						hs->req_len = -1;
+					}
+					else {
+						hs->res_len = -1;
+					}
+					hs->isChunked = true;
+					hn->len = tn->content_len;
+				}
+				else {
+					goto chunk_else;
+				}
+				free(tem);
 			}
 			else {
-				hn->len = 0;
-				offset = 0;
+				chunk_else:
+				offset = find(data, HLEN);
+				if (offset != -1){
+					u_char * cursor = data + offset + SHLEN + 1;
+					offset = find(cursor, CRLF);
+					char tem[6];
+					memcpy(tem, cursor, offset);
+					if (type < FLAG){
+						hs->req_len=(u_int)atol(tem);
+					}
+					else {
+						hs->res_len = (u_int)atol(tem);
+					}
+					//hn->len = (u_int)atol(tem)< tn->content_len ? (u_int)atol(tem) : tn->content_len;
+				}
+				else {
+					hn->len = 0;
+					offset = 0;
+				}
 			}
+
 			offset = find(data, ENCODE);
 			if (offset != -1){
 				u_char * cursor = data + offset + SENCODE + 1;
@@ -802,7 +872,6 @@ void Csession_regroupDlg::handle_http(tcp_session *ts,tcp_node *tn){
 				isTrunk = true;
 			}
 			else {
-				hn->content = (u_char *)malloc(hn->len);
 				hn->content = data + offset + SDCRLF;
 				len += offset + SDCRLF;
 				u_int tcp_len = tn->content_len - len;
@@ -821,7 +890,7 @@ void Csession_regroupDlg::handle_http(tcp_session *ts,tcp_node *tn){
 				return;
 			}
 			isTrunk = false;
-			hn->content = (u_char *)malloc(hn->len);
+			//hn->content = (u_char *)malloc(hn->len);
 			hn->content = data + offset + SDCRLF;
 			int len = offset + SDCRLF;
 			u_int tcp_len = tn->content_len - len;
@@ -839,12 +908,16 @@ void Csession_regroupDlg::add_http_session(http_session *hs,http_node *hn,bool i
 	if (hs != NULL){
 		if (!isNew){
 			http_tail->isGzip = hs->isGzip;
-			http_tail->ver = (u_char *)malloc(strlen((char *)hs->ver));
-			memcpy(http_tail->ver,hs->ver,strlen((char *)hs->ver));
-			http_tail->status = (u_char *)malloc(4);
-			memcpy(http_tail->status, hs->status, 4);
-			http_tail->host = (u_char *)malloc(strlen((char *)hs->host));
-			memcpy(http_tail->host, hs->host, strlen((char *)hs->host));
+			http_tail->isChunked = hs->isChunked;
+			http_tail->ver = (u_char *)malloc(strlen((char *)hs->ver)+1);
+			memcpy(http_tail->ver,hs->ver,strlen((char *)hs->ver)+1);
+			http_tail->status = (u_char *)malloc(strlen((char *)hs->status)+1);
+			memcpy(http_tail->status, hs->status, strlen((char *)hs->status) + 1);
+			http_tail->res_len = hs->res_len;
+			if (hs->host != NULL){
+				http_tail->host = (u_char *)malloc(strlen((char *)hs->host)+1);
+				memcpy(http_tail->host, hs->host, strlen((char *)hs->host)+1);
+			}
 			free(hs->ver);
 			free(hs->status);
 			free(hs->host);
@@ -866,9 +939,20 @@ void Csession_regroupDlg::add_http_session(http_session *hs,http_node *hn,bool i
 		
 	}
 	else {
-		addnode:
+	addnode:
 		http_session * p;
 		p = http_tail;
+		if (p->isChunked && hn->len>0){
+			int offset = find(hn->content, CRLF);
+			if (1 <= offset){
+				u_char *tem = hn->content;
+				hn->len = hn->len - offset - SCRLF;
+				//hn->content = (u_char *)malloc(hn->len);
+				//memcpy(hn->content, tem + offset + SCRLF, hn->len);
+
+				hn->content = hn->content + offset + SCRLF;
+			}
+		}
 		if (p != NULL){
 			http_node *q = p->node_tail;
 			p->node_tail = hn;
